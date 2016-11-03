@@ -28,6 +28,11 @@ miniProxy has several known limitations. Some of them may be fixed in future rel
 * No cookie support
 * Basic AJAX support, but only for browsers that use `XMLHttpRequest`
 
+## Additional Improvements
+
+* Eliminated warnings caused by presence of &amp; in the action filed of forms
+* Support to prevent re-proxification of already proxified URLs in client javascript
+
 ## Contact and Feedback
 
 If you'd like to contribute to miniProxy or file a bug or feature request, please visit [its GitHub page][4].
