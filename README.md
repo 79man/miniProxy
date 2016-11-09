@@ -30,8 +30,12 @@ miniProxy has several known limitations. Some of them may be fixed in future rel
 
 ## Additional Improvements
 
-* Eliminated warnings caused by presence of &amp; in the action filed of forms
+* Support for $.ajax added
+* Support for window.open added
+* Eliminated warnings caused by presence of &amp; in the action field of forms
 * Support to prevent re-proxification of already proxified URLs in client javascript
+* Support for eliminating fails due to $_=XXXXX string added to the querystring during testing
+* Support for logging modified URLs to file, and addition of clear logs button on the main page
 
 ## Contact and Feedback
 

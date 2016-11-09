@@ -26,6 +26,19 @@
 	/*
 	ob_start("ob_gzhandler"); // Not needed as zLib is on
 	*/
+	define('LOG_FILE', 'logs.txt');
+	function log_msg($txt) {
+		 $myfile = file_put_contents(LOG_FILE, $txt.PHP_EOL , FILE_APPEND | LOCK_EX);
+	}
+	function clear_log_file() {
+		file_put_contents(LOG_FILE, "");
+	}
+	function startsWith($haystack,$needle) {
+		return (substr($haystack,0,strlen($needle)) == $needle);
+	}
+	function endsWith($haystack,$needle) {
+		return (substr($haystack,-strlen($needle)) == $needle);
+	}
 
 	if (version_compare(PHP_VERSION, '5.4.7', '<')) {
 		die ("miniProxy requires PHP version 5.4.7 or later.");
@@ -77,6 +90,7 @@
 	$prefixHost = strpos($prefixHost, ":") ? implode(":", explode(":", $_SERVER["HTTP_HOST"], -1)) : $prefixHost;
 	
 	define("PROXY_PREFIX", "http" . (isset($_SERVER["HTTPS"]) ? "s" : "") . "://" . $prefixHost . $prefixPort . $_SERVER["SCRIPT_NAME"] . "?");
+	define("CLEAR_LOGS", "CLEAR_LOGS_1234567765443288765");
 	
 	//Makes an HTTP request via cURL, using request data that was passed directly to this script.
 	function makeRequest($url) {
@@ -230,9 +244,29 @@
 			$url = substr($_SERVER["REQUEST_URI"], strlen($_SERVER["SCRIPT_NAME"]) + 1);
 		}
 	}
+	// Check for the &_= pattern and remove the same
+	$queryrecvd = parse_url($url, PHP_URL_QUERY);
+	if($queryrecvd === null) {
+		// No query string received, check for the pattern		
+		if(strpos($url, '&_=') !== false) {
+			log_msg('Received Request for: ' . $url);
+			// Eliminate the _ part
+			$myArray = explode('&_=', $url);
+			$url = $myArray[0];
+			log_msg('Modified Request to: ' . $url);
+		}
+	}
 	
-	if (empty($url)) {
-		die("<html><head><title>miniProxy</title></head><body><h1>Welcome to miniProxy!</h1>miniProxy can be directly invoked like this: <a href=\"" . PROXY_PREFIX . "http://example.net/\">" . PROXY_PREFIX . "http://example.net/</a><br /><br />Or, you can simply enter a URL below:<br /><br /><form onsubmit=\"window.location.href='" . PROXY_PREFIX . "' + document.getElementById('site').value; return false;\"><input id=\"site\" type=\"text\" size=\"50\" /><input type=\"submit\" value=\"Proxy It!\" /></form></body></html>");
+	if (empty($url) || ($url === CLEAR_LOGS)) {
+		// Clear the log file if requested.
+		if($url === CLEAR_LOGS) {
+			clear_log_file();
+			//log_msg('Received Clear Logs Req: ' . $url);			
+			//log_msg('About to redirect to ' . $_SERVER['PHP_SELF']);
+			header('Location: '.$_SERVER['PHP_SELF']);
+			die;
+		}
+		die("<html><head><title>miniProxy</title></head><body><h1>Welcome to miniProxy!</h1>miniProxy can be directly invoked like this: <a href=\"" . PROXY_PREFIX . "http://example.net/\">" . PROXY_PREFIX . "http://example.net/</a><br /><br />Or, you can simply enter a URL below:<br /><br /><form onsubmit=\"window.location.href='" . PROXY_PREFIX . "' + document.getElementById('site').value; return false;\"><input id=\"site\" type=\"text\" size=\"50\" /><input type=\"submit\" value=\"Proxy It!\" /></form><form onsubmit=\"window.location.href='" . PROXY_PREFIX . CLEAR_LOGS . "'; return false;\"><input type=\"submit\" value=\"Clear Logs\" /></form></body></html>");
 	} else if (strpos($url, ":/") !== strpos($url, "://")) {
 		//Work around the fact that some web servers (e.g. IIS 8.5) change double slashes appearing in the URL to a single slash.
 		//See https://github.com/joshdick/miniProxy/pull/14
@@ -496,38 +530,52 @@
 			$scriptElem = $doc->createElement("script",
 				'(function() {					
 					//console && console.log("jQuery:", jQuery, $, "proxy_prefix:", proxyPrefix );
+					var proxyPrefix = "' . PROXY_PREFIX . '";
 					if (typeof jQuery == "undefined") {
 						; // Do nothing
 					}
 					else {
-						var proxyPrefix = "' . PROXY_PREFIX . '";
 						if($.ajax){
 							var oldAjax = $.ajax;
 							$.ajax = function() {
-								//console && console.log("Step 1: ajax call", arguments.length, JSON.stringify(arguments));
+								//console && console.trace("Step 1: ajax call", arguments.length, JSON.stringify([].slice.call(arguments)));
 								if (arguments[0] !== null && arguments[0] !== undefined) {
-									var url = arguments[0].url;								
-									
-									// Avoid re-proxification of URLs.
+									var url = arguments[0].url;
+
 									if(url) {
+										// Avoid re-proxification of URLs.
 										if(url.substr(0, proxyPrefix.length) !== proxyPrefix) {
 											url = rel2abs("' . $url . '", url);
 											url = "' . PROXY_PREFIX . '" + url;
 											arguments[0].url = url;
-											//console && console.log("Step 2: After patching url:", arguments.length, JSON.stringify(arguments));
+											//console && console.trace("Step 2: After patching url:", arguments.length, JSON.stringify([].slice.call(arguments)));
 										}
 									}
 								}
 								//return proxied.apply(this, [].slice.call(arguments));
 								return oldAjax.apply($, [].slice.call(arguments));
-							}
+							};
 						}
 					}
+
+					var windOpen = window.open;
+					window.open = function(strUrl, strWindowName, strWindowFeatures) {
+						console.trace("w.O()", strUrl, strWindowName, strWindowFeatures);
+						if(strUrl) {
+							// Avoid re-proxification of URLs.
+							if(strUrl.substr(0, proxyPrefix.length) !== proxyPrefix) {
+								strUrl = rel2abs("' . $url . '", strUrl);
+								strUrl = "' . PROXY_PREFIX . '" + strUrl;
+							}
+						}
+						return windOpen(strUrl, strWindowName, strWindowFeatures);
+					};
 				})();'
 			);
 			$scriptElem->setAttribute("type", "text/javascript");
 			$bodyElem->appendChild($scriptElem);
 		}
+
 		/*
 			Removed signature string from html as it causes errors in the browser for some sites
 		*/
